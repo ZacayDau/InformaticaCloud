@@ -1,8 +1,11 @@
 # !pip install TextBlob
 import json
+import logging
 import os
 
 import hashlib
+from datetime import datetime
+
 import spark as spark
 from kafka import KafkaConsumer
 from pyparsing import col
@@ -21,7 +24,27 @@ from flatjson import Autoflatten
 
 os.environ['PYSPARK_SUBMIT_ARGS'] = '--packages org.apache.spark:spark-sql-kafka-0-10_2.11:2.4.1 pyspark-shell'
 
+
+
 cn=ConfigurationFile()
+WORKINGDIR=cn.data["WORKINGDIR"]
+log_dir =cn.data["log_dir"]
+timestampNow = datetime.now()
+
+class JSONFormatter(logging.Formatter):
+   def __init__(self):
+      super().__init__()
+   def format(self, record):
+      record.msg = json.dumps(record.msg)
+      return super().format(record)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+loggingStreamHandler = logging.StreamHandler()
+loggingStreamHandler = logging.FileHandler(log_dir+"/"+"logs.json",mode='a') #to save to file
+loggingStreamHandler.setFormatter(JSONFormatter())
+logger.addHandler(loggingStreamHandler)
+
 # Set the consumer
 
 #bootstrapServers = "cnt7-naya-cdh63:9092"
@@ -78,15 +101,20 @@ class ConsumerPySpark:
             dfflat= cf.flattenX()
             #dfflat.show(1)
             print("links:")
+            logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "links:"})
+
             dflinks = self.getlinks(dfflat)
             #dflinks.show(3)
             print("connections:")
+            logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "connections:"})
             dfConns=self.getDfConnections(dfflat)
             #dfConns.show(1)
             print("transformations:")
+            logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "transformations:"})
             dfTrans=self.getTransformations(dfflat)
             #dfTrans.show(3)
             print("transformationsDataObject:")
+            logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "transformationsDataObject:"})
             dtTransDataObjects=self.getTransformationsDataObject(dfflat)
 
 
@@ -98,10 +126,12 @@ class ConsumerPySpark:
 
             dtTansColumnsData = self.getTansfomrationColumnsData(dfflat)
             print("data columns:")
+            logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "data columns:"})
 
 
             dtTansColumns = self.getTansfomrationColumns(dfflat)
             print("columns:")
+            logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "columns:"})
            # dtTansColumns.show(1)
 
             manualMappingDF = self.createManualMappingDF(dtTransDataObjects)
@@ -127,6 +157,7 @@ class ConsumerPySpark:
             #dtTansColumnsData.sort("transformations_name").filter(dtTansColumnsData["transformations_name"]=="Sequence"). show(60, False)
 
             print("Df result:")
+            logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "Df result:"})
             df=self.createSourceToTarget(dflinks,
                                          dfConns,
                                          dfTrans,
@@ -138,8 +169,10 @@ class ConsumerPySpark:
                                          colsDF)
             df=df.filter(df.TargetColumnName=="CustomerKey")
             df.printSchema()
+
             mapName = dflinks.select("mapName").rdd.flatMap(list).collect()
             print(mapName)
+            logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": mapName})
             #df.show(70)
             #
             cons.importDataframeToOrientDB(df, BASIC_AUTH, HTTP_URL, DATABASE_NAME, PORT)
@@ -275,12 +308,17 @@ class ConsumerPySpark:
         orientClient = OrientDB(basicAuth, url, database, port,mapName[0])
         orientClient.createDatabase()
         print("create vertex sources:")
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "create vertex sources:"})
+
         orientClient.createVertexes(dfSources)
         print("create vertex targets:")
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "create vertex targets:"})
         orientClient.createVertexes(dfTargets)
         print("create edges:")
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "create edges:"})
         orientClient.createEdges(dfEdges)
         print("checkAnomaly:")
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "checkAnomaly:"})
         orientClient.checkAnomaly(mapName[0])
 
 
@@ -654,9 +692,13 @@ class ConsumerPySpark:
         columnTrans = columntrans.alias('columnTrans')
 
         print("colTransData:")
+
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "colTransData"})
+
         #colTransData.show(1)
 
         print("columnTrans")
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "columnTrans"})
         #columnTrans.show(1)
 
         dfSourceToTargetColsSource = self.createDFSTTColsSource(colTransData, dfSourceToTarget)
@@ -688,6 +730,7 @@ class ConsumerPySpark:
             .withColumnRenamed("schemaName", "TargetSchema") \
             .withColumnRenamed("serverName", "TargetServer")
         print("dfJoin6")
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "dfJoin6"})
         # dfJoin6.show(1)
         return dfJoin6
 
@@ -878,6 +921,7 @@ class ConsumerPySpark:
 
         ).distinct()
         print("dfSourceToTargetColsTarget")
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "dfSourceToTargetColsTarget"})
         #dfSourceToTargetColsTarget.show(1)
         dfSourceToTargetColsTarget = dfSourceToTargetColsTarget.withColumnRenamed("mapId", "mapIdC")
         return dfSourceToTargetColsTarget
@@ -887,6 +931,7 @@ class ConsumerPySpark:
         dfSourceToTargetEx = dfSourceToTargetEx.drop("ContainerObjectName").drop("ContainerObjectPath") \
             .drop("ControlflowName").drop("ControlflowPath").withColumnRenamed("mapId", "mapIdT")
         print("dfSourceToTargetEx:")
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "dfSourceToTargetEx"})
         dfSourceToTargetEx=dfSourceToTargetEx.withColumnRenamed("SourceId","SourceIdC")\
         .withColumnRenamed("SourceObjectType","SourceObjectTypeC")\
         .withColumnRenamed("SourceDB","SourceDBC") \
@@ -913,6 +958,9 @@ class ConsumerPySpark:
                                                               dfSourceToTargetColsSource[
                                                                   "mapId"]), "inner")
         print("dfSToTColsSourceEx before:")
+
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data":  "dfSToTColsSourceEx before:"})
+
         #dfSToTColsSourceEx.show(1)
         # create dfSToTColsSourceEx same as dfSourceToTargetColsSource but the source is expression
         # inherits the columns from the source component
@@ -956,6 +1004,7 @@ class ConsumerPySpark:
 
 
         print("dfSToTColsSourceEx")
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "dfSToTColsSourceEx"})
         #dfSToTColsSourceEx.show(1)
         return dfSToTColsSourceEx
 
@@ -1054,6 +1103,7 @@ class ConsumerPySpark:
 
 
         print("dfSToTColsTargetEx")
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "dfSToTColsTargetEx"})
         #dfSToTColsTargetEx.show(1)
         return dfSToTColsTargetEx
 
@@ -1117,6 +1167,8 @@ class ConsumerPySpark:
                                                                        isNotNull())
 
         print("dfSourceToTargetColsSource")
+
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "dfSourceToTargetColsSource"})
         #dfSourceToTargetColsSource.show(1)
         return dfSourceToTargetColsSource
 
@@ -1159,6 +1211,7 @@ class ConsumerPySpark:
             .withColumnRenamed("To_class", "TargetObjectType")
         # Add columns to each component
         print("dfSourceToTarget")
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "dfSourceToTarget"})
         #dfSourceToTarget.show(1)
         return dfSourceToTarget
 
@@ -1198,6 +1251,7 @@ class ConsumerPySpark:
                                  dfJoin5["TargetLayerName"])
         #
         print("dfJoin5")
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "dfJoin5"})
         # dfJoin5.show(1)
         return dfJoin5
 
@@ -1234,6 +1288,7 @@ class ConsumerPySpark:
             .withColumn('TargetConnID', regexp_replace('TargetConnID', 'saas:@', ''))
         # #join with sourceConnetion
         print("dfJoin4")
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "dfJoin4"})
         # dfJoin4.show(1)
         return dfJoin4
 
@@ -1266,6 +1321,7 @@ class ConsumerPySpark:
             .withColumnRenamed("customQuery", "SourceSql")
         # # joins links with target dataobject
         print("dfJoin3")
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "dfJoin3"})
         # dfJoin3.show(1)
         return dfJoin3
 
@@ -1287,6 +1343,7 @@ class ConsumerPySpark:
                                  ). \
             withColumnRenamed("transformations_name", "TargetLayerName")
         print("dfJoin2")
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "dfJoin2"})
         # dfJoin2.show(1)
         return dfJoin2
 
@@ -1311,6 +1368,7 @@ class ConsumerPySpark:
             .withColumnRenamed("fromTransformation_ID", "From_trID") \
             .withColumnRenamed("fromTransformation_class", "From_class")
         print("dfJoin")
+        logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "dfJoin"})
         # dfJoin.show(1)
         return dfJoin
 
@@ -1398,38 +1456,5 @@ class ConsumerPySpark:
 
 cons=ConsumerPySpark(bootstrapServers,topics)
 df=cons.flatRawMap()
-
-
-
-    # display the dataframe (Pyspark dataframe)
-   # dataframe.show(1)
-
-
-
-
-# df_kafka = df_kafka.select(col("value").cast("string"))
-#
-#
-#
-# schema = StructType() \
-#     .add("mapName", StringType())
-#
-#
-# df_kafka = df_kafka.select(col("value").cast("string"))\
-#     .select(from_json(col("value"), schema).alias("value"))\
-#     .select("value.*")
-#
-#
-# df_kafka.printSchema()
-#
-#
-# df_kafka \
-#     .writeStream \
-#     .format("console") \
-#     .start()\
-#     .awaitTermination()
-
-
-
 
 

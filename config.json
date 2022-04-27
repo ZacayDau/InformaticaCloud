@@ -1,0 +1,22 @@
+{
+"WORKINGDIR":"/home/naya/downloads/iics/",
+"log_dir":"/home/naya/downloads/logs",
+"baseApiUrl":"https://usw5.dm-us.informaticacloud.com/saas",
+"loginUrl":"/public/core/v3/login",
+"userName":"zacay.daushin1@gmail.com",
+"password":"Nadav2009",
+"topic":"Informatica-Data",
+"brokers":"cnt7-naya-cdh63:9092",
+"source_file":"/home/naya/downloads/iics/rawData/",
+"histDir":"/home/naya/downloads/iics/rawData/hist",
+"hdfs_stg_dir":"/tmp/staging/iics/raw",
+"hdfsHost":"cnt7-naya-cdh63",
+"hdfsUser":"hdfs",
+"BASIC_AUTH":"Basic cm9vdDpyb290",
+"HTTP_URL":"http://localhost",
+"DATABASE_NAME":"Customer_E2E",
+"PORT":"2480",
+"urlSlack":"https://hooks.slack.com/services/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",
+"mapDictPath":"/home/naya/downloads/iics/",
+"elasticHost":"http://localhost:9200"
+}

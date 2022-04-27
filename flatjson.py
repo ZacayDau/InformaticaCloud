@@ -1,8 +1,32 @@
+import logging
+from datetime import datetime
+
 from pyparsing import col
 from pyspark.sql.types import *
 from pyspark.sql.functions import *
 from pyspark.sql import types as T
 import pyspark.sql.functions as F
+
+from ConfigurationFile import ConfigurationFile
+
+cn=ConfigurationFile()
+WORKINGDIR=cn.data["WORKINGDIR"]
+log_dir =cn.data["log_dir"]
+timestampNow = datetime.now()
+
+class JSONFormatter(logging.Formatter):
+   def __init__(self):
+      super().__init__()
+   def format(self, record):
+      record.msg = json.dumps(record.msg)
+      return super().format(record)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+loggingStreamHandler = logging.StreamHandler()
+loggingStreamHandler = logging.FileHandler(log_dir+"/"+"logs.json",mode='a') #to save to file
+loggingStreamHandler.setFormatter(JSONFormatter())
+logger.addHandler(loggingStreamHandler)
 
 class Autoflatten:
 
@@ -50,6 +74,7 @@ class Autoflatten:
         while len(complex_fields) != 0:
             col_name = list(complex_fields.keys())[0]
             print("Processing :" + col_name + " Type : " + str(type(complex_fields[col_name])))
+            logger.info({"date": str(timestampNow), "source": "AutoFlatten", "data":  "Processing :" + col_name + " Type : " + str(type(complex_fields[col_name]))})
 
             # if StructType then convert all sub element to columns.
             # i.e. flatten structs

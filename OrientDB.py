@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import time
 from datetime import datetime
 from os.path import exists
@@ -17,6 +18,26 @@ from pyspark.sql.functions import concat
 from ConfigurationFile import ConfigurationFile
 from Slack import Slack
 from os.path import exists
+
+
+cn=ConfigurationFile()
+WORKINGDIR=cn.data["WORKINGDIR"]
+log_dir =cn.data["log_dir"]
+timestampNow = datetime.now()
+
+class JSONFormatter(logging.Formatter):
+   def __init__(self):
+      super().__init__()
+   def format(self, record):
+      record.msg = json.dumps(record.msg)
+      return super().format(record)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+loggingStreamHandler = logging.StreamHandler()
+loggingStreamHandler = logging.FileHandler(log_dir+"/"+"logs.json",mode='a') #to save to file
+loggingStreamHandler.setFormatter(JSONFormatter())
+logger.addHandler(loggingStreamHandler)
 
 
 class OrientDB:
@@ -51,6 +72,10 @@ class OrientDB:
     def isDbExists(self):
         url = "{}:{}/database/{}".format(self.url, self.port, self.databasename)
         print(url)
+        logger.info({"date": str(timestampNow), "source": "OrientDB", "data": url})
+
+        logger.info({"date": str(timestampNow), "source": "OrientDB", "data": "login..."})
+
         payload = {}
         headers = {
             'Authorization': self.basicAuth
@@ -81,19 +106,29 @@ class OrientDB:
                     'Authorization': self.basicAuth
                 }
                 print(url)
+                logger.info({"date": str(timestampNow), "source": "OrientDB", "data": url})
                 response = requests.request("POST", url, headers=headers, data=payload)
 
                 dictResult= json.loads(response.text)
                 if "errors" not in dictResult:
                     print("create class Column..")
+                    logger.info({"date": str(timestampNow), "source": "OrientDB", "data":  "create class Column.."})
+
                     self.createClass("V")
                     print("create class Edge..")
+                    logger.info(
+                        {"date": str(timestampNow), "source": "OrientDB", "data": "create class Column.."})
+
                     self.createClass("E")
                     print("Database:{} created successfully".format(self.databasename))
+                    logger.info({"date": str(timestampNow), "source": "OrientDB", "data": "Database:{} created successfully".format(self.databasename)})
                 else:
                     print("errors creating database {} ".format( self.databasename))
+                    logger.error({"date": str(timestampNow), "source": "OrientDB",
+                                 "data":  "errors creating database {} ".format( self.databasename)})
         else:
             print("Database:{} already exists!".format( self.databasename))
+            logger.info({"date": str(timestampNow), "source": "OrientDB", "data": "Database:{} already exists!".format( self.databasename)})
 
     def runCommand(self,command):
        url = "{}:{}/command/{}/sql".format(self.url, self.port, self.databasename)
@@ -105,9 +140,11 @@ class OrientDB:
                 'Content-Type': 'application/json'
             }
        print(command)
+       logger.info({"date": str(timestampNow), "source": "OrientDB", "data":  command})
        response = requests.request("POST", url, headers=headers, data=payload)
        time.sleep(2)
        print(response.text)
+       logger.info({"date": str(timestampNow), "source": "OrientDB", "data": response.text})
        return  json.loads(response.text)
 
     def createVertexes(self,df):
@@ -204,15 +241,18 @@ class OrientDB:
             commadColumnMap="CREATE VERTEX COLUMN CONTENT "+ json.dumps(dictCommandMap)
 
 
-            print("Zacay:"+row["IsObjectData"])
+
             if (row["IsObjectData"])=="1":
 
                 print("Object is: "+dictCommandData["ObjectGUID"])
+                logger.info({"date": str(timestampNow), "source": "OrientDB", "data":"Object is: "+dictCommandData["ObjectGUID"] })
                 if  not self.isGuidExistsOnOrientDB(dictCommandData["ObjectGUID"]) :
                     print("create v1 {}".format(str(i)))
+                    logger.info({"date": str(timestampNow), "source": "OrientDB", "data": "create v1 {}".format(str(i))})
                     res=self.runCommand(commadColumnData)
                     self.mapDict[dictCommandData["ObjectGUID"]]=res["result"][0]["@rid"]
-                    print(self.mapDict)
+
+
                 else:
                     rid=self.getRidbyObjectGuid(dictCommandData["ObjectGUID"])
                     #{k: v for k, v in points.items() if v[0] < 5 and v[1] < 5}
@@ -221,18 +261,23 @@ class OrientDB:
 
 
                 print("Object is: " + dictCommandMap["ObjectGUID"])
+                logger.info({"date": str(timestampNow), "source": "OrientDB", "data":"Object is: " + dictCommandMap["ObjectGUID"] })
                 if  not self.isGuidExistsOnOrientDB(dictCommandMap["ObjectGUID"]) :
                      print("create v2 {}".format(str(i)))
+                     logger.info({"date": str(timestampNow), "source": "OrientDB",
+                                  "data":  "create v2 {}".format(str(i))})
                      res=self.runCommand(commadColumnMap)
                      self.mapDict[dictCommandMap["ObjectGUID"]] = res["result"][0]["@rid"]
-                     print(self.mapDict)
+
             else:
 
                 if  not self.isGuidExistsOnOrientDB(dictCommandMap["ObjectGUID"]) :
                  print("create v3 {}".format(str(i)))
+                 logger.info({"date": str(timestampNow), "source": "OrientDB",
+                              "data": "create v3 {}".format(str(i))})
                  res=self.runCommand(commadColumnMap)
                  self.mapDict[commadColumnMap["ObjectGUID"]] = res["result"][0]["@rid"]
-                 print(self.mapDict)
+
 
                 else:
                     rid = self.getRidbyObjectGuid(dictCommandMap["ObjectGUID"])
@@ -328,18 +373,26 @@ class OrientDB:
                 if (not self.isEdgeExist(srid1,srid2)):
                     cmd="CREATE EDGE DATAFLOW FROM {} TO {}".format(srid1,srid2)
                     print("From:{} to: {}".format(sguid1,sguid2))
+                    logger.info({"date": str(timestampNow), "source": "OrientDB",
+                                 "data":  "From:{} to: {}".format(sguid1,sguid2) })
                     res=self.runCommand(cmd)
                     self.mapDictE[srid1+"-"+ srid2 ] = res["result"][0]["@rid"]
 
                 if (not self.isEdgeExist(srid2,trid3)):
                     cmd="CREATE EDGE DATAFLOW FROM {} TO {}".format(srid2,trid3)
                     print("From:{} to: {}".format(sguid2, tguid3))
+                    logger.info({"date": str(timestampNow), "source": "OrientDB",
+                                 "data": "From:{} to: {}".format(sguid2, tguid3)})
                     res=self.runCommand(cmd)
                     self.mapDictE[srid2 + "-" + trid3] = res["result"][0]["@rid"]
 
                 if (not self.isEdgeExist(trid3,trid4)):
                     cmd="CREATE EDGE DATAFLOW FROM {} TO {}".format(trid3,trid4)
                     print("From:{} to: {}".format(tguid3, tguid4))
+
+                    logger.info({"date": str(timestampNow), "source": "OrientDB",
+                                 "data": "From:{} to: {}".format(tguid3, tguid4)})
+
                     res=self.runCommand(cmd)
                     self.mapDictE[trid3 + "-" + trid4] = res["result"][0]["@rid"]
 
@@ -358,6 +411,9 @@ class OrientDB:
                  if (not self.isEdgeExist(srid1,srid2)):
                     cmd="CREATE EDGE DATAFLOW FROM {} TO {}".format(srid1,srid2)
                     print("From:{} to: {}".format(sguid1, sguid2))
+                    logger.info({"date": str(timestampNow), "source": "OrientDB",
+                                 "data": "From:{} to: {}".format(sguid1, sguid2)})
+
                     res = self.runCommand(cmd)
                     self.mapDictE[srid1 + "-" + srid2] = res["result"][0]["@rid"]
 
@@ -366,12 +422,19 @@ class OrientDB:
                  if (not self.isEdgeExist(srid2,trid3)):
                     cmd="CREATE EDGE DATAFLOW FROM {} TO {}".format(srid2,trid3)
                     print("From:{} to: {}".format(sguid2, sguid2))
+
+                    logger.info({"date": str(timestampNow), "source": "OrientDB",
+                                 "data": "From:{} to: {}".format(sguid2, sguid2)})
+
                     res = self.runCommand(cmd)
                     self.mapDictE[srid2 + "-" + trid3] = res["result"][0]["@rid"]
 
 
             elif (row["SourceIsObjectData"]=="0" and  row["TargetIsObjectData"]=="1"):
                  print("case3 -2 edges M->M->T")
+
+                 logger.info({"date": str(timestampNow), "source": "OrientDB",
+                              "data":  "case3 -2 edges M->M->T"})
 
 
                  sguid1=row["SourceColumnMapGuid"]
@@ -384,12 +447,16 @@ class OrientDB:
                  if (not self.isEdgeExist(srid1, trid2)):
                      cmd="CREATE EDGE DATAFLOW FROM {} TO {}".format(srid1,trid2)
                      print("From:{} to: {}".format(sguid1, tguid2))
+                     logger.info({"date": str(timestampNow), "source": "OrientDB",
+                                  "data": "From:{} to: {}".format(sguid1, tguid2) })
                      res = self.runCommand(cmd)
                      self.mapDictE[srid1 + "-" + trid2] = res["result"][0]["@rid"]
 
                  if (not self.isEdgeExist(trid2, trid3)):
                      cmd="CREATE EDGE DATAFLOW FROM {} TO {}".format(trid2,trid3)
                      print("From:{} to: {}".format(tguid2, tguid3))
+                     logger.info({"date": str(timestampNow), "source": "OrientDB",
+                                  "data": "From:{} to: {}".format(tguid2, tguid3)})
                      res = self.runCommand(cmd)
                      self.mapDictE[trid2 + "-" + trid3] = res["result"][0]["@rid"]
 
@@ -404,6 +471,10 @@ class OrientDB:
                  if (not self.isEdgeExist(srid1,trid2)):
                     cmd="CREATE EDGE DATAFLOW FROM {} TO {}".format(srid1,trid2)
                     print("From:{} to: {}".format(sguid1, tguid2))
+
+                    logger.info({"date": str(timestampNow), "source": "OrientDB",
+                                 "data": "From:{} to: {}".format(sguid1, tguid2)})
+
                     res = self.runCommand(cmd)
                     self.mapDictE[srid1 + "-" + trid2] = res["result"][0]["@rid"]
 
@@ -461,24 +532,16 @@ class OrientDB:
                           "=>\n".join(ls)
                 slackClient=Slack(url)
                 print(message)
+
+                logger.info({"date": str(timestampNow), "source": "OrientDB",
+                             "data":  message})
+
                 slackClient.sendMessage(message)
         except Exception as e:
             print(e)
+            logger.error({"date": str(timestampNow), "source": "OrientDB", "data": e.__traceback__})
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-    def generateUpdateCommand(self,myDict,rid):
+def generateUpdateCommand(self,myDict,rid):
 
 
         foodict = {k.replace("'",""): v for k, v in myDict.items() }
@@ -494,17 +557,11 @@ class OrientDB:
             i=i+1
 
         print(cmd+cm)
+        logger.info({"date": str(timestampNow), "source": "OrientDB", "data": cmd+cm})
+
         return cmd
 
 
 
-BASIC_AUTH = "Basic cm9vdDpyb290"
-HTTP_URL = "http://localhost"
-DATABASE_NAME = "Customer_E2E"
-
-PORT = "2480"
-mapName="LoadSTG"
-
-orientClient = OrientDB(BASIC_AUTH, HTTP_URL, DATABASE_NAME, PORT, mapName)
-orientClient.saveJsonToFile("/home/naya/downloads/a.json",{})
+#
 #orientClient.checkAnomaly(mapName)

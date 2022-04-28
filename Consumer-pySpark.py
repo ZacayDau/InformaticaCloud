@@ -167,12 +167,35 @@ class ConsumerPySpark:
                                          dtexpinner,
                                          manualMappingDF,
                                          colsDF)
-            df=df.filter(df.TargetColumnName=="CustomerKey")
+            #df=df.filter(df.TargetColumnName=="CustomerKey")
             df.printSchema()
 
-            mapName = dflinks.select("mapName").rdd.flatMap(list).collect()
-            print(mapName)
-            logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": mapName})
+            result = df.collect()[1]
+            row = result["ControlflowPath"]
+            now_time = datetime.now().date()
+            # print(row)
+            # schema_names=df.select("ControlflowPath").first()
+            df.repartition(1).write.mode("Append").option("header", "true").csv(
+                'hdfs://cnt7-naya-cdh63:8020/user/naya/Project/{}/{}'.format(row, now_time))
+
+
+
+
+            #mapName = dflinks.select("mapName").rdd.flatMap(list).collect()
+            print(row)
+            logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": row})
+
+
+            #now_time = datetime.now().date()
+            # print(row)
+
+            # logger.info(
+            #     {"date": str(timestampNow), "source": "pySpark-Consumer", "data": "send to hdfs {}".format(mapName[0])})
+            # # schema_names=df.select("ControlflowPath").first()
+            # df.repartition(1).write.mode("Append").option("header", "true").csv(
+            #     'hdfs://cnt7-naya-cdh63:8020/user/naya/Project/{}/{}'.format(mapName[0], now_time))
+            #
+
             #df.show(70)
             #
             cons.importDataframeToOrientDB(df, BASIC_AUTH, HTTP_URL, DATABASE_NAME, PORT)

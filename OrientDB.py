@@ -100,7 +100,7 @@ class OrientDB:
     def createDatabase(self):
 
         if (not self.isDbExists()):
-                url="{}/database/{}/plocal".format(self.url,self.databasename)
+                url="{}:{}/database/{}/plocal".format(self.url,self.port,self.databasename)
                 payload = {}
                 headers = {
                     'Authorization': self.basicAuth
@@ -539,9 +539,9 @@ class OrientDB:
                 slackClient.sendMessage(message)
         except Exception as e:
             print(e)
-            logger.error({"date": str(timestampNow), "source": "OrientDB", "data": e.__traceback__})
+            logger.error({"date": str(timestampNow), "source": "OrientDB", "data": "error"})
 
-def generateUpdateCommand(self,myDict,rid):
+    def generateUpdateCommand(self,myDict,rid):
 
 
         foodict = {k.replace("'",""): v for k, v in myDict.items() }

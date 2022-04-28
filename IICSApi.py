@@ -425,8 +425,13 @@ class Run:
 
             time.sleep(5)
 
-r=Run()
+
+
+r = Run()
 r.run()
+
+
+
 
 
 

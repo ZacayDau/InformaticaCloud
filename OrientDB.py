@@ -496,7 +496,7 @@ class OrientDB:
                     "as: a, maxDepth:15, pathAlias:qwr}.out('DATAFLOW')" \
                     "{class:COLUMN, as: b,maxDepth:15, pathAlias:qwr} " \
                     "RETURN DISTINCT b.@rid as final, qwr[IsVisible = 1] as Path,qwr.DataType as DataType " \
-                    ",b.out().size() as size,a.ControlFlowPath as map,qwr.ControlflowPath as MapName," \
+                    ",b.out().size() as size,a.ControlFlowPath as map,qwr.ControlFlowPath as MapName," \
                     "qwr.LayerName as  LayerName,qwr.ObjectName as ColumnName) where size =1"
             query = query.replace("{0}", str(mapName))
             myDict=self.runCommand(query)

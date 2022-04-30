@@ -567,7 +567,3 @@ class OrientDB:
 
 #
 #orientClient.checkAnomaly(mapName)
-
-
-cnOrient=OrientDB(cn.data["BASIC_AUTH"],cn.data["HTTP_URL"],"Customer_E2E",cn.data["PORT"],"Stg_To_DW")
-cnOrient.checkAnomaly("Stg_To_DW")

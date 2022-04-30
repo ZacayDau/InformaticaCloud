@@ -22,6 +22,7 @@ from ConfigurationFile import ConfigurationFile
 from OrientDB import OrientDB
 from flatjson import Autoflatten
 
+
 os.environ['PYSPARK_SUBMIT_ARGS'] = '--packages org.apache.spark:spark-sql-kafka-0-10_2.11:2.4.1 pyspark-shell'
 
 
@@ -68,6 +69,9 @@ PORT=cn.data["PORT"]
 
 spark = SparkSession\
         .builder\
+        .config("spark.driver.memory","6g")\
+        .config("spark.executor.memory", "6g") \
+        .config("spark.executor.memory_overhead", "6g") \
         .appName("Read-Informatica-Data")\
         .getOrCreate()
 
@@ -115,7 +119,7 @@ class ConsumerPySpark:
             #dfTrans.show(3)
             print("transformationsDataObject:")
             logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "transformationsDataObject:"})
-            dtTransDataObjects=self.getTransformationsDataObject(dfflat)
+            dtTransDataObjects=self.getTransformationsDataObject(dfflat).persist()
 
 
 
@@ -124,25 +128,25 @@ class ConsumerPySpark:
 
 
 
-            dtTansColumnsData = self.getTansfomrationColumnsData(dfflat)
+            dtTansColumnsData = self.getTansfomrationColumnsData(dfflat).persist()
             print("data columns:")
             logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "data columns:"})
 
 
-            dtTansColumns = self.getTansfomrationColumns(dfflat)
+            dtTansColumns = self.getTansfomrationColumns(dfflat).persist()
             print("columns:")
             logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "columns:"})
            # dtTansColumns.show(1)
 
-            manualMappingDF = self.createManualMappingDF(dtTransDataObjects)
-            colsDF=self.createDfColumns(dtTansColumns)
+            manualMappingDF = self.createManualMappingDF(dtTransDataObjects).persist()
+            colsDF=self.createDfColumns(dtTansColumns).persist()
 
 
 
 
             dtExp= dtTansColumns.filter(dtTansColumns.transformations_name=="Expression")
             #dtExp.show()
-            dtexpinner= self.createInnerlinkExpression(dtExp)
+            dtexpinner= self.createInnerlinkExpression(dtExp).persist()
             #dtexpinner.show()
 
             #dtTansColumns.filter(dtTansColumns.transformations_name=="Expression").show(1)
@@ -166,9 +170,12 @@ class ConsumerPySpark:
                                          dtTransDataObjects,
                                          dtexpinner,
                                          manualMappingDF,
-                                         colsDF)
+                                         colsDF).persist()
             #df=df.filter(df.TargetColumnName=="CustomerKey")
             df.printSchema()
+            df=df.persist()
+
+
 
             result = df.collect()[1]
             row = result["ControlflowPath"]
@@ -253,7 +260,7 @@ class ConsumerPySpark:
             .withColumnRenamed("SourceColumnMapId", "ColumnMapId") \
             .withColumnRenamed("SourceColumnDataGuid", "ColumnDataGuid") \
             .withColumnRenamed("SourceColumnMapGuid", "ColumnMapGuid") \
-            .withColumn("UpdatedDate", unix_timestamp(lit(current_timestamp()),'yyyy-MM-dd HH:mm:ss').cast("timestamp"))
+            .withColumn("UpdatedDate", unix_timestamp(lit(current_timestamp()),'yyyy-MM-dd HH:mm:ss').cast("timestamp")).persist()
 
         dfTargets = df.select(df["ContainerObjectName"],
                               df["ContainerObjectPath"],
@@ -299,7 +306,7 @@ class ConsumerPySpark:
             .withColumnRenamed("TargetColumnMapId", "ColumnMapId") \
             .withColumnRenamed("TargetColumnDataGuid", "ColumnDataGuid") \
             .withColumnRenamed("TargetColumnMapGuid", "ColumnMapGuid") \
-            .withColumn("UpdatedDate",unix_timestamp(lit(current_timestamp()), 'yyyy-MM-dd HH:mm:ss').cast("timestamp"))
+            .withColumn("UpdatedDate",unix_timestamp(lit(current_timestamp()), 'yyyy-MM-dd HH:mm:ss').cast("timestamp")).persist()
 
 
         dfEdges=df.select(df["SourceColumnDataGuid"],
@@ -313,7 +320,8 @@ class ConsumerPySpark:
                           df["TargetColumnMapGuid"],
                           df["TargetColumnMapId"],
                           df["TargetIsObjectData"],
-                          )
+                          ).persist()
+
         # print("number of rows Sources:")
         # print(dfSources.show(1))
         #
@@ -329,6 +337,7 @@ class ConsumerPySpark:
 
 
         orientClient = OrientDB(basicAuth, url, database, port,mapName[0])
+        print("logged in!@#$!@%$!@$")
         orientClient.createDatabase()
         print("create vertex sources:")
         logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "create vertex sources:"})
@@ -343,7 +352,7 @@ class ConsumerPySpark:
         print("checkAnomaly:")
         logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "checkAnomaly:"})
         orientClient.checkAnomaly(mapName[0])
-
+        spark.catalog.clearCache()
 
     def createDfColumns(self,df):
         df = df.select(df["mapId"],
@@ -351,15 +360,14 @@ class ConsumerPySpark:
                        df["transformations_ID"],
                        df["field_ID"],
                        df["column_Name"],
-                       df["field_ID_Data"])
+                       df["field_ID_Data"]).persist()
         return df
 
 
     def createManualMappingDF(self,df):
 
         df=df.filter(df.map_content_transformations_manualMappings_mappingList_toField_ID \
-                .isNotNull())
-
+                .isNotNull()).persist()
         df=df.select(df["mapId"],
                      df["mapPath"],
                      df["transformations_ID"],
@@ -379,8 +387,7 @@ class ConsumerPySpark:
         dfnew=df.withColumnRenamed("ProjectName","ContainerObjectName") \
         .withColumnRenamed("mapPath", "ContainerObjectPath") \
         .withColumnRenamed("mapName", "ControlflowName") \
-        .withColumnRenamed("transformations_name", "SourceLayerName")
-
+        .withColumnRenamed("transformations_name", "SourceLayerName").persist()
         dfnew=dfnew.withColumn("ControlflowPath", dfnew["ControlflowName"]) \
                 .withColumn("SourceId", dfnew["transformations_ID"]) \
                 .withColumn("SourceSchema", lit(""))\
@@ -414,8 +421,7 @@ class ConsumerPySpark:
                                                    "when field_DataType like '%integer%' then 'integer' " \
                                            " else field_DataType end")) \
             .withColumn("TargetPrecision", dfnew["precision"]) \
-                .withColumn("TargetScale", dfnew["scale"])
-
+                .withColumn("TargetScale", dfnew["scale"]).persist()
         dfnew=dfnew.select( dfnew["ContainerObjectName"],
                                 dfnew["ContainerObjectPath"],
                                  dfnew["ControlflowName"],
@@ -466,7 +472,7 @@ class ConsumerPySpark:
                          df["connections_database"],
                          df["connections_schema"],
                          df["connections_type"]
-                         ).distinct()
+                         ).distinct().persist()
         dfNew=dfNew.withColumnRenamed("path","mapPath") \
                    .withColumnRenamed("id", "mapId") \
                    .withColumnRenamed("connections_federatedId", "connectionID")\
@@ -484,7 +490,7 @@ class ConsumerPySpark:
                           df["map_content_transformations_ID"],
                           df["map_content_transformations_class"],
                           df["map_content_transformations_name"]
-                          ).distinct()
+                          ).distinct().persist()
         dfNew = dfNew.withColumnRenamed("path", "mapPath") \
             .withColumnRenamed("id", "mapId") \
             .withColumnRenamed("path", "mapPath")\
@@ -498,22 +504,24 @@ class ConsumerPySpark:
     def getTransformationsDataObject(self,df):
 
         if ("map_content_transformations_manualMappings_ID" not in df.columns):
-            df = df.withColumn("map_content_transformations_manualMappings_ID", lit(""))
+            df = df.withColumn("map_content_transformations_manualMappings_ID", lit("")).persist()
         if ("map_content_transformations_manualMappings_class" not in df.columns):
-            df = df.withColumn("map_content_transformations_manualMappings_class", lit(""))
+            df = df.withColumn("map_content_transformations_manualMappings_class", lit("")).persist()
         if ("map_content_transformations_manualMappings_mappingList_ID" not in df.columns):
-            df = df.withColumn("map_content_transformations_manualMappings_mappingList_ID", lit(""))
+            df = df.withColumn("map_content_transformations_manualMappings_mappingList_ID", lit("")).persist()
 
         if ("map_content_transformations_manualMappings_mappingList_class" not in df.columns):
-            df = df.withColumn("map_content_transformations_manualMappings_mappingList_class", lit(""))
+            df = df.withColumn("map_content_transformations_manualMappings_mappingList_class", lit("")).persist()
         if ("map_content_transformations_manualMappings_mappingList_fromFieldName" not in df.columns):
-            df = df.withColumn("map_content_transformations_manualMappings_mappingList_fromFieldName", lit(""))
+            df = df.withColumn("map_content_transformations_manualMappings_mappingList_fromFieldName", lit("")).persist()
 
         if ("map_content_transformations_manualMappings_mappingList_toField_ID" not in df.columns):
-            df = df.withColumn("map_content_transformations_manualMappings_mappingList_toField_ID", lit(""))
+            df = df.withColumn("map_content_transformations_manualMappings_mappingList_toField_ID", lit("")).persist()
+
 
         if ("map_content_transformations_manualMappings_mappingList_toField_class" not in df.columns):
-            df = df.withColumn("map_content_transformations_manualMappings_mappingList_toField_class", lit(""))
+            df = df.withColumn("map_content_transformations_manualMappings_mappingList_toField_class", lit("")).persist()
+
 
 
 
@@ -544,7 +552,8 @@ class ConsumerPySpark:
                           df["map_content_transformations_manualMappings_mappingList_toField_class"]
 
 
-                          ).distinct()
+                          ).distinct().persist()
+
 
         dfNew = dfNew.withColumnRenamed("path", "mapPath") \
             .withColumnRenamed("id", "mapId") \
@@ -584,7 +593,8 @@ class ConsumerPySpark:
                           df["map_content_transformations_dataAdapter_object_fields_scale"],
                           df["map_content_transformations_dataAdapter_object_fields_nativeName"],
                           df["map_content_transformations_dataAdapter_object_fields_nativeType"]
-                          ).distinct()
+                          ).distinct().persist()
+
         dfNew = dfNew.withColumnRenamed("path", "mapPath") \
             .withColumnRenamed("id", "mapId") \
             .withColumnRenamed("path", "mapPath") \
@@ -602,7 +612,8 @@ class ConsumerPySpark:
 
     def getTansfomrationColumns(self, df):
         if ("map_content_transformations_fields_expression" not in df.columns):
-            df = df.withColumn("map_content_transformations_fields_expression", lit(""))
+            df = df.withColumn("map_content_transformations_fields_expression", lit("")).persist()
+
 
         dfNew = df.select(df["mapName"],
                           df["id"],
@@ -621,7 +632,9 @@ class ConsumerPySpark:
                           df["map_content_transformations_fields_precision"],
                           df["map_content_transformations_fields_scale"]
 
-                          ).distinct()
+                          ).distinct().persist()
+
+
         dfNew = dfNew.withColumnRenamed("path", "mapPath") \
             .withColumnRenamed("id", "mapId") \
             .withColumnRenamed("path", "mapPath") \
@@ -658,7 +671,8 @@ class ConsumerPySpark:
                           df["map_content_links_toGroup_class"],
                           df["map_content_links_toTransformation_ID"],
                           df["map_content_links_toTransformation_class"]
-                          ).distinct()
+                          ).distinct().persist()
+
         dfNew = dfNew.withColumnRenamed("path", "mapPath") \
             .withColumnRenamed("id", "mapId") \
             .withColumnRenamed("path", "mapPath") \
@@ -694,21 +708,17 @@ class ConsumerPySpark:
 
         #joins link with source transformations
         dfJoin = self.createDFJoin(links, transSource)
-
         # joins link with target transformations
         dfJoin2 = self.createDFJoin2(dfJoin, transTarget)
         # #joins links with source dataobject
         dfJoin3 = self.createDFJoin3(dataObjectSource, dfJoin2)
         dfJoin4 = self.createDFJoin4(dataObjectTarget, dfJoin3)
-
         cnSource = cnSource.drop("mapName").drop("mapId").drop("mapPath")
         dfJoin5 = self.createDFJoin5(cnSource, dfJoin4)
-
         #print("cnTarget")
         #cnTarget.show(1)
         cnTarget=cnTarget.drop("mapName").drop("mapId").drop("mapPath")
         dfJoin6 = self.createDFJoin6(cnSource, cnTarget, dfJoin5)
-
         dfSourceToTarget = self.createDFSTT(dfJoin6)
 
         colTransData = columntransData.alias('colTransData')
@@ -725,14 +735,14 @@ class ConsumerPySpark:
         #columnTrans.show(1)
 
         dfSourceToTargetColsSource = self.createDFSTTColsSource(colTransData, dfSourceToTarget)
-
+        dfSourceToTargetColsSource.persist()
         dfExpSource=self.createDFSTTColsEx(dfSourceToTarget, dfSourceToTargetColsSource)
-
+        dfExpSource.persist()
 
         dfSourceToTargetColsTarget = self.createDFSTTColsTarget(colTransData, dfSourceToTarget)
-
+        dfSourceToTargetColsTarget.persist()
         dfExpTarget = self.createDFSTTColsExT(dfSourceToTarget, dfSourceToTargetColsTarget)
-
+        dfExpTarget.persist()
         #join source and targets
 
         dfSourceToTargetColFinal = self.createDFSTTFinal\
@@ -740,7 +750,7 @@ class ConsumerPySpark:
              manualMappingDF,
              colsDF
              )
-
+        dfSourceToTargetColFinal.persist()
         dfSourceToTargetColFinal=dfSourceToTargetColFinal.\
         filter(dfSourceToTargetColFinal.TargetColumnName.isNotNull())
 
@@ -753,6 +763,7 @@ class ConsumerPySpark:
             .withColumnRenamed("schemaName", "TargetSchema") \
             .withColumnRenamed("serverName", "TargetServer")
         print("dfJoin6")
+
         logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "dfJoin6"})
         # dfJoin6.show(1)
         return dfJoin6
@@ -798,7 +809,7 @@ class ConsumerPySpark:
         # print("Df4:")
         # dfManual.show(1)
 
-        dfSourceToTargetColFinal = dfSourceToTargetColFinal.unionAll(dfExpSource)
+        dfSourceToTargetColFinal = dfSourceToTargetColFinal.unionAll(dfExpSource).persist()
         dfSourceToTargetColFinal=dfSourceToTargetColFinal.unionAll(dfExpTarget)
         dfSourceToTargetColFinal = dfSourceToTargetColFinal.unionAll(dtexpinner)
         dfSourceToTargetColFinal = dfSourceToTargetColFinal.unionAll(dfManual)
@@ -917,7 +928,8 @@ class ConsumerPySpark:
             .withColumnRenamed("field_ID_Adapter", "TargetColumnID") \
             .withColumnRenamed("nativeType", "TargetDataType") \
             .withColumnRenamed("DBPrecision", "TargetPrecision") \
-            .withColumnRenamed("DBScale", "TargetScale")
+            .withColumnRenamed("DBScale", "TargetScale").persist()
+
         dfSourceToTargetColsTarget = dfSourceToTargetColsTarget. \
             select(
 
@@ -942,7 +954,8 @@ class ConsumerPySpark:
             dfSourceToTargetColsTarget["TargetPrecision"],
             dfSourceToTargetColsTarget["TargetScale"]
 
-        ).distinct()
+        ).distinct().persist()
+
         print("dfSourceToTargetColsTarget")
         logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data": "dfSourceToTargetColsTarget"})
         #dfSourceToTargetColsTarget.show(1)
@@ -950,7 +963,8 @@ class ConsumerPySpark:
         return dfSourceToTargetColsTarget
 
     def createDFSTTColsEx(self, dfSourceToTarget, dfSourceToTargetColsSource):
-        dfSourceToTargetEx = dfSourceToTarget.filter(dfSourceToTarget.TargetLayerName == "Expression")
+        dfSourceToTargetEx = dfSourceToTarget.filter(dfSourceToTarget.TargetLayerName == "Expression").persist()
+
         dfSourceToTargetEx = dfSourceToTargetEx.drop("ContainerObjectName").drop("ContainerObjectPath") \
             .drop("ControlflowName").drop("ControlflowPath").withColumnRenamed("mapId", "mapIdT")
         print("dfSourceToTargetEx:")
@@ -979,11 +993,10 @@ class ConsumerPySpark:
                                                                   "SourceObjectType"]) & \
                                                              (dfSourceToTargetEx["mapIdT"] ==
                                                               dfSourceToTargetColsSource[
-                                                                  "mapId"]), "inner")
+                                                                  "mapId"]), "inner").persist()
         print("dfSToTColsSourceEx before:")
 
         logger.info({"date": str(timestampNow), "source": "pySpark-Consumer", "data":  "dfSToTColsSourceEx before:"})
-
         #dfSToTColsSourceEx.show(1)
         # create dfSToTColsSourceEx same as dfSourceToTargetColsSource but the source is expression
         # inherits the columns from the source component
@@ -1032,7 +1045,8 @@ class ConsumerPySpark:
         return dfSToTColsSourceEx
 
     def createDFSTTColsExT(self, dfSourceToTarget, dfSourceToTargetColsTarget):
-        dfSourceToTargetEx = dfSourceToTarget.filter(dfSourceToTarget.SourceLayerName == "Expression")
+        dfSourceToTargetEx = dfSourceToTarget.filter(dfSourceToTarget.SourceLayerName == "Expression").persist()
+
         dfSourceToTargetEx = dfSourceToTargetEx.drop("ContainerObjectName").drop("ContainerObjectPath") \
             .drop("ControlflowName").drop("ControlflowPath").withColumnRenamed("mapId", "mapIdT")
 
@@ -1070,7 +1084,8 @@ class ConsumerPySpark:
                                                                   "TargetObjectType"]) & \
                                                              (dfSourceToTargetEx["mapIdT"] ==
                                                               dfSourceToTargetColsTarget[
-                                                                  "mapIdC"]), "inner")
+                                                                  "mapIdC"]), "inner").persist()
+
         # print("dfSToTColsTargetEx before:")
         # dfSToTColsTargetEx.show(1)
         # create dfSToTColsSourceEx same as dfSourceToTargetColsSource but the source is expression
@@ -1143,7 +1158,8 @@ class ConsumerPySpark:
             .withColumnRenamed("field_ID_Adapter", "SourceColumnID") \
             .withColumnRenamed("nativeType", "SourceDataType") \
             .withColumnRenamed("DBPrecision", "SourcePrecision") \
-            .withColumnRenamed("DBScale", "SourceScale")
+            .withColumnRenamed("DBScale", "SourceScale").persist()
+
         dfSourceToTargetColsSource = dfSourceToTargetColsSource. \
             select(
                    dfSourceToTargetColsSource["ContainerObjectName"],
@@ -1243,7 +1259,8 @@ class ConsumerPySpark:
             .withColumnRenamed("connections_name", "SourceConnectionKey") \
             .withColumnRenamed("databaseName", "SourceDb") \
             .withColumnRenamed("schemaName", "SourceSchema") \
-            .withColumnRenamed("serverName", "SourceServer")
+            .withColumnRenamed("serverName", "SourceServer").persist()
+
         #
         if ("SourceSql" not in dfJoin5.columns):
             dfJoin5 = dfJoin5.withColumn("SourceSql", lit(""))
@@ -1317,7 +1334,8 @@ class ConsumerPySpark:
 
     def createDFJoin3(self, dataObjectSource, dfJoin2):
         dfJoin3 = dfJoin2.join(dataObjectSource, (dfJoin2['From_trID'] == dataObjectSource['transformations_ID']) \
-                               & (dfJoin2['From_class'] == dataObjectSource['transformations_class']), "inner")
+                               & (dfJoin2['From_class'] == dataObjectSource['transformations_class']), "inner").persist()
+
         # #reanme
         #print(dfJoin3.columns)
         if ("customQuery" not in dfJoin3.columns):
@@ -1350,7 +1368,8 @@ class ConsumerPySpark:
 
     def createDFJoin2(self, dfJoin, transTarget):
         dfJoin2 = dfJoin.join(transTarget, (dfJoin['To_trID'] == transTarget['transformations_ID']) \
-                              & (dfJoin['To_class'] == transTarget['transformations_class']), "inner")
+                              & (dfJoin['To_class'] == transTarget['transformations_class']), "inner").persist()
+
         # #rename columns
         dfJoin2 = dfJoin2.select(dfJoin2["links.mapName"],
                                  dfJoin2["ProjectName"],
@@ -1372,7 +1391,8 @@ class ConsumerPySpark:
 
     def createDFJoin(self, links, transSource):
         dfJoin = links.join(transSource, (links['fromTransformation_ID'] == transSource['transformations_ID']) \
-                            & (links['fromTransformation_class'] == transSource['transformations_class']), "inner")
+                            & (links['fromTransformation_class'] == transSource['transformations_class']), "inner").persist()
+
         # rename columns
         dfJoin = dfJoin.select(dfJoin["links.mapName"],
                                dfJoin["ProjectName"],
@@ -1420,7 +1440,8 @@ class ConsumerPySpark:
                                 (manualMappingDF['mapIdC'] == colsDF['mapId'])\
                                  & (manualMappingDF['TargetId'] == colsDF['transformations_ID']) \
                                 & (manualMappingDF['toField_ID'] == colsDF['field_ID'])
-                                , "inner")
+                                , "inner").persist()
+
 
         dt=dt.withColumnRenamed("mapId","mapIdD")\
             .withColumnRenamed("TargetId", "TargetIdC") \
@@ -1430,7 +1451,9 @@ class ConsumerPySpark:
                          (dt['mapIdC'] == dfExpTarget['mapId']) \
                          & (dt['TargetIdC'] == dfExpTarget['TargetId'])\
                          & (dt['field_ID_Data'] == dfExpTarget['TargetColumnID']),
-                         "inner")
+                         "inner").persist()
+
+
 
 
         dfNewRow=dfNewRow.select(dfNewRow["ContainerObjectName"],

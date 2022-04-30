@@ -492,11 +492,11 @@ class OrientDB:
 
 
         try:
-            query = "select DataType,MapName,LayerName,ColumnName from (MATCH {class:COLUMN,where:(ControlflowPath=\'{0}\'), " \
+            query = "select DataType,MapName,LayerName,ColumnName from (MATCH {class:COLUMN,where:(ControlFlowPath=\'{0}\'), " \
                     "as: a, maxDepth:15, pathAlias:qwr}.out('DATAFLOW')" \
                     "{class:COLUMN, as: b,maxDepth:15, pathAlias:qwr} " \
                     "RETURN DISTINCT b.@rid as final, qwr[IsVisible = 1] as Path,qwr.DataType as DataType " \
-                    ",b.out().size() as size,a.ControlflowPath as map,qwr.ControlflowPath as MapName," \
+                    ",b.out().size() as size,a.ControlFlowPath as map,qwr.ControlflowPath as MapName," \
                     "qwr.LayerName as  LayerName,qwr.ObjectName as ColumnName) where size =1"
             query = query.replace("{0}", str(mapName))
             myDict=self.runCommand(query)
@@ -537,6 +537,8 @@ class OrientDB:
                              "data":  message})
 
                 slackClient.sendMessage(message)
+            else:
+                print("dfd")
         except Exception as e:
             print(e)
             logger.error({"date": str(timestampNow), "source": "OrientDB", "data": "error"})
@@ -565,3 +567,7 @@ class OrientDB:
 
 #
 #orientClient.checkAnomaly(mapName)
+
+
+cnOrient=OrientDB(cn.data["BASIC_AUTH"],cn.data["HTTP_URL"],"Customer_E2E",cn.data["PORT"],"Stg_To_DW")
+cnOrient.checkAnomaly("Stg_To_DW")

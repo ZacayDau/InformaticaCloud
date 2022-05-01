@@ -19,8 +19,8 @@ from ConfigurationFile import ConfigurationFile
 
 
 # conection between  spark and kafka
+from FlatJson import Autoflatten
 from OrientDB import OrientDB
-from flatjson import Autoflatten
 
 
 os.environ['PYSPARK_SUBMIT_ARGS'] = '--packages org.apache.spark:spark-sql-kafka-0-10_2.11:2.4.1 pyspark-shell'
@@ -64,7 +64,10 @@ HTTP_URL = cn.data["HTTP_URL"]
 DATABASE_NAME=cn.data["DATABASE_NAME"]
 #PORT = "2480"
 PORT=cn.data["PORT"]
-
+print(BASIC_AUTH )
+print(HTTP_URL )
+print(DATABASE_NAME )
+print(PORT )
 
 
 spark = SparkSession\
@@ -173,9 +176,6 @@ class ConsumerPySpark:
                                          colsDF).persist()
             #df=df.filter(df.TargetColumnName=="CustomerKey")
             df.printSchema()
-            df=df.persist()
-
-
 
             result = df.collect()[1]
             row = result["ControlflowPath"]
@@ -183,7 +183,7 @@ class ConsumerPySpark:
             # print(row)
             # schema_names=df.select("ControlflowPath").first()
             df.repartition(1).write.mode("Append").option("header", "true").csv(
-                'hdfs://cnt7-naya-cdh63:8020/user/naya/Project/{}/{}'.format(row, now_time))
+                'hdfs://cnt7-naya-cdh63:8020/tmp/staging/iics/finalDF/{}/{}/{}'.format(row, now_time,"FinalDF"))
 
 
 

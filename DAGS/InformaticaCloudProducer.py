@@ -17,7 +17,7 @@ dag = DAG(
 )
 InformaticaCloudProducer = BashOperator(
     task_id='InformaticaCloudProducer',
-    bash_command='python /home/naya/tmp/pycharm_project_137/KafkaProducer.py',
+    bash_command='python /home/naya/tmp/pycharm_project_137/Kafka_Producer_New.py',
     dag=dag,
 )
 

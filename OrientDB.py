@@ -81,7 +81,7 @@ class OrientDB:
             'Authorization': self.basicAuth
         }
         response = requests.request("GET", url, headers=headers, data=payload)
-
+        print(response.text)
         dictResult = json.loads(response.text)
         if "errors" not in dictResult:
             return True
@@ -537,11 +537,9 @@ class OrientDB:
                              "data":  message})
 
                 slackClient.sendMessage(message)
-            else:
-                print("dfd")
         except Exception as e:
             print(e)
-            logger.error({"date": str(timestampNow), "source": "OrientDB", "data": "error"})
+            logger.error({"date": str(timestampNow), "source": "OrientDB", "data": e.__traceback__})
 
     def generateUpdateCommand(self,myDict,rid):
 
@@ -563,7 +561,7 @@ class OrientDB:
 
         return cmd
 
+#orientClient = OrientDB("Basic cm9vdDpyb290", "http://localhost", "demodb", "2480","LoadtoSTRG")
+#print(orientClient.isDbExists())
 
-
-#
 #orientClient.checkAnomaly(mapName)
